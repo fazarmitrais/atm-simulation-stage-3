@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>List Example</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.1.3/dist/css/bootstrap.min.css"
+        integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+</head>
+
+<body>
+    <div class="section">
+        <div class="container">
+            <h1 class="mt-4">ACCOUNT FORM</h1>
+            <form id="createForm">
+                <div class="row">
+                    <div class="col-2">
+                        <label for="accountNumber">Account Number : </label>
+                    </div>
+                    <div class="col-10">
+                        <input type="text" value="" id="accountNumber" name="accountNumber">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-2">
+                        <label for="name">Name : </label>
+                    </div>
+                    <div class="col-10">
+                        <input type="text" value="" id="name" name="name">
+                    </div>
+
+                </div>
+                <div class="row">
+                    <input type="submit" value="Submit">
+                </div>
+            </form>
+            <p class="text-danger">{{.message}}</p>
+            <a href="/api/v1/account" class="btn btn-success">Return to account list</a>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.14.3/dist/umd/popper.min.js"
+        integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.1.3/dist/js/bootstrap.min.js"
+        integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy"
+        crossorigin="anonymous"></script>
+    <script>
+        document.getElementById("createForm").addEventListener("submit", function (event) {
+            var formData = new FormData(event.target)
+
+            var jsonData = {};
+            formData.forEach(function (value, key) {
+                jsonData[key] = value;
+            });
+
+            var jsonPayload = JSON.stringify(jsonData);
+
+            fetch("/api/v1/account/create", {
+                method: "POST",
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                body: jsonPayload,
+            })
+                .then(data => {
+                    console.log('Success:', data);
+                    // Handle the JSON response as needed
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+        });
+    </script>
+</body>
+
+</html>

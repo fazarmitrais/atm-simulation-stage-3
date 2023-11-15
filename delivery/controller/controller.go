@@ -1,10 +1,16 @@
-package rest
+package Controller
 
 import (
+	"io"
+	"net/http"
+	"os"
+
+	"github.com/fazarmitrais/atm-simulation-stage-3/domain/account/entity"
 	"github.com/fazarmitrais/atm-simulation-stage-3/service"
+	"github.com/labstack/echo/v4"
 )
 
-type Rest struct {
+type Controller struct {
 	service *service.Service
 }
 
@@ -13,12 +19,80 @@ type ResponseFormatter struct {
 	Mesage  string `json:"message"`
 }
 
-func New(svc *service.Service) *Rest {
-	return &Rest{service: svc}
+func New(svc *service.Service) *Controller {
+	return &Controller{service: svc}
+}
+
+func (re *Controller) Register(e *echo.Echo) {
+	account := e.Group("/api/v1/account")
+	account.GET("", re.Accounts)
+	account.POST("/import", re.Import)
+	account.GET("/create", re.Create)
+	account.POST("/create", re.Create)
+}
+
+var response = make(map[string]interface{})
+
+func (re *Controller) Create(c echo.Context) error {
+	var err error
+	if c.Request().Method == http.MethodPost {
+		var account entity.Account
+		err = c.Bind(&account)
+		if err == nil {
+			err = re.service.Insert(c, account)
+		}
+		if err != nil {
+			response["message"] = err.Error()
+		} else {
+			response["message"] = "Success"
+		}
+	}
+	return c.Render(http.StatusOK, "accountForm.html", response)
+}
+
+func (re *Controller) Accounts(c echo.Context) error {
+	acc, err := re.service.GetAll(c)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+	return c.Render(http.StatusOK, "index.html", acc)
+}
+
+func (re *Controller) Import(c echo.Context) error {
+	form, err := c.MultipartForm()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Error parsing form")
+	}
+	files := form.File["fileInput"]
+	if len(files) == 0 {
+		return echo.NewHTTPError(http.StatusBadRequest, "Error retrieving file information")
+	}
+	file := files[0]
+	src, err := file.Open()
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error opening file")
+	}
+	defer src.Close()
+
+	dst, err := os.Create("uploads/" + file.Filename)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error creating file")
+	}
+	defer dst.Close()
+
+	if _, err = io.Copy(dst, src); err != nil {
+		return c.String(http.StatusInternalServerError, "Error copying file")
+	}
+
+	err = re.service.Import(c, "uploads/"+file.Filename)
+	if err != nil {
+		return err
+	}
+	return re.Accounts(c)
 }
 
 /*
-func (re *Rest) Register(e *echo.Echo) {
+func (re *Controller) Register(e *echo.Echo) {
 
 	g := e.Group("/api/v1/account")
 	g.POST("/validate", re.PINValidation)
@@ -28,7 +102,7 @@ func (re *Rest) Register(e *echo.Echo) {
 	g.GET("/exit", re.Exit)
 }
 
-func (re *Rest) BalanceCheck(c echo.Context) error {
+func (re *Controller) BalanceCheck(c echo.Context) error {
 	acct, resp := re.service.BalanceCheck(c, cok.Values["acctNbr"].(string))
 	if resp != nil {
 		resp.ReturnAsJson(w)
@@ -39,7 +113,7 @@ func (re *Rest) BalanceCheck(c echo.Context) error {
 	return
 }
 
-func (re *Rest) Exit(c echo.Context) error {
+func (re *Controller) Exit(c echo.Context) error {
 	cookieStore, err := re.cookie.Store.Get(r, envLib.GetEnv("COOKIE_STORE_NAME"))
 	if err != nil {
 		responseFormatter.New(http.StatusBadRequest,
@@ -55,7 +129,7 @@ func (re *Rest) Exit(c echo.Context) error {
 	json.NewEncoder(w).Encode(responseFormatter.New(http.StatusOK, "Logout success", false))
 }
 
-func (re *Rest) PINValidation(c echo.Context) error {
+func (re *Controller) PINValidation(c echo.Context) error {
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
 		responseFormatter.New(http.StatusBadRequest,
@@ -89,7 +163,7 @@ func (re *Rest) PINValidation(c echo.Context) error {
 	errl.ReturnAsJson(w)
 }
 
-func (re *Rest) Withdraw(c echo.Context) error {
+func (re *Controller) Withdraw(c echo.Context) error {
 	cookieStore, err := re.cookie.Store.Get(r, envLib.GetEnv("COOKIE_STORE_NAME"))
 	if err != nil {
 		responseFormatter.New(http.StatusInternalServerError,
@@ -126,7 +200,7 @@ func (re *Rest) Withdraw(c echo.Context) error {
 	json.NewEncoder(w).Encode(acc)
 }
 
-func (re *Rest) Transfer(c echo.Context) error {
+func (re *Controller) Transfer(c echo.Context) error {
 	cookieStore, err := re.cookie.Store.Get(r, envLib.GetEnv("COOKIE_STORE_NAME"))
 	if err != nil {
 		responseFormatter.New(http.StatusInternalServerError,

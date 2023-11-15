@@ -1,7 +1,7 @@
 # atm-simulation-stage-3
 
 This is the backend side of ATM simulation.
-The service can be accessed using REST API.
+The service can be accessed using Controller API.
 
 ## How to run the app
 Open terminal or command prompt, then go to the app root directory.

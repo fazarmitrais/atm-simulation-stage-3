@@ -138,8 +138,8 @@ func (s *Service) BalanceCheck(ctx echo.Context, acctNbr string) (*entity.Accoun
 	return accFromDb.ToAccountResponse(), nil
 }
 
-func (s *Service) Import(c echo.Context) error {
-	accounts, err := s.AccountCsvRepository.Import()
+func (s *Service) Import(c echo.Context, path string) error {
+	accounts, err := s.AccountCsvRepository.Import(path)
 	if err != nil {
 		return err
 	}
@@ -159,6 +159,24 @@ func (s *Service) Import(c echo.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Service) Insert(ctx echo.Context, account entity.Account) error {
+	if strings.TrimSpace(account.Name) == "" {
+		return errors.New("name is required")
+	}
+	if strings.TrimSpace(account.AccountNumber) == "" {
+		return errors.New("Account Number is required")
+	} else if len(account.AccountNumber) < 6 {
+		return errors.New("Account Number should have 6 digits length")
+	} else if _, err := strconv.Atoi(account.AccountNumber); err != nil {
+		return errors.New("Account Number should only contains numbers")
+	}
+	accFromDb, _ := s.AccountRepository.GetByAccountNumber(ctx, account.AccountNumber)
+	if accFromDb != nil {
+		return errors.New("Account number is already exist")
+	}
+	return s.AccountRepository.Insert(ctx, account)
 }
 
 func (s *Service) GetAll(ctx echo.Context) ([]*entity.Account, error) {

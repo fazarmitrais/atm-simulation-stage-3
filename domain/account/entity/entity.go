@@ -1,10 +1,13 @@
 package entity
 
+import "time"
+
 type Account struct {
-	Name          string  `json:"name" gorm:"primaryKey"`
-	AccountNumber string  `json:"accountNumber"`
-	PIN           string  `json:"pin"`
-	Balance       float64 `json:"balance"`
+	Name          string    `json:"name" gorm:"primaryKey"`
+	AccountNumber string    `json:"accountNumber"`
+	PIN           string    `json:"pin"`
+	Balance       float64   `json:"balance"`
+	CreatedAt     time.Time `json:"createdAt"`
 }
 
 type AccountResponse struct {

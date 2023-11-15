@@ -13,7 +13,6 @@ import (
 )
 
 func Connection() *gorm.DB {
-	defer fmt.Println("Database successfully connected!")
 	username := envLib.GetEnv("DB_USERNAME")
 	password := envLib.GetEnv("DB_PASSWORD")
 	host := envLib.GetEnv("DB_HOST")
@@ -32,6 +31,8 @@ func Connection() *gorm.DB {
 	sqlDb.SetMaxIdleConns(2)
 	sqlDb.SetMaxOpenConns(10)
 	sqlDb.SetConnMaxLifetime(time.Hour * 1)
+
+	fmt.Println("Database successfully connected!")
 
 	return db
 }
