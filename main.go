@@ -13,7 +13,7 @@ import (
 	"github.com/fazarmitrais/atm-simulation-stage-3/delivery/menu"
 	accountCsv "github.com/fazarmitrais/atm-simulation-stage-3/domain/account/repository/csv"
 	accountPostgreRepo "github.com/fazarmitrais/atm-simulation-stage-3/domain/account/repository/postgre"
-	transactionMapdatastore "github.com/fazarmitrais/atm-simulation-stage-3/domain/transaction/repository/mapDatastore"
+	trxPostgreRepo "github.com/fazarmitrais/atm-simulation-stage-3/domain/transaction/repository/postgre"
 	"github.com/fazarmitrais/atm-simulation-stage-3/service"
 	templateRender "github.com/fazarmitrais/atm-simulation-stage-3/template"
 	"github.com/joho/godotenv"
@@ -45,9 +45,9 @@ func main() {
 	flag.StringVar(&path, "path", "", "Path to directory")
 	flag.Parse()
 	acctRepo := accountPostgreRepo.NewPostgre(db)
-	trxMap := transactionMapdatastore.NewMapDatastore()
+	trxRepo := trxPostgreRepo.NewPostgre(db)
 	acctCsv := accountCsv.NewCSV()
-	svc := service.NewService(acctRepo, acctCsv, trxMap)
+	svc := service.NewService(acctRepo, acctCsv, trxRepo)
 
 	if strings.TrimSpace(path) != "" {
 		importDataFromCSV(context, path, svc)

@@ -1,11 +1,15 @@
 package Controller
 
 import (
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 
+	"github.com/fazarmitrais/atm-simulation-stage-3/cookies"
 	"github.com/fazarmitrais/atm-simulation-stage-3/domain/account/entity"
+	trxEntity "github.com/fazarmitrais/atm-simulation-stage-3/domain/transaction/entity"
 	"github.com/fazarmitrais/atm-simulation-stage-3/service"
 	"github.com/labstack/echo/v4"
 )
@@ -24,14 +28,71 @@ func New(svc *service.Service) *Controller {
 }
 
 func (re *Controller) Register(e *echo.Echo) {
-	account := e.Group("/api/v1/account")
+	auth := e.Group("/api/v1/auth")
+	auth.GET("/login", re.PINValidation)
+	auth.POST("/login", re.PINValidation)
+	auth.GET("/logout", re.Logout)
+	account := e.Group("/api/v1/account", cookies.Authorize)
 	account.GET("", re.Accounts)
 	account.POST("/import", re.Import)
 	account.GET("/create", re.Create)
 	account.POST("/create", re.Create)
+	withdraw := e.Group("/api/v1/withdraw", cookies.Authorize)
+	withdraw.GET("", re.Withdraw)
+	withdraw.POST("", re.Withdraw)
+	withdraw.GET("/summary", re.WithdrawSummary)
 }
 
 var response = make(map[string]interface{})
+
+func (re *Controller) Withdraw(c echo.Context) error {
+	var statusCode = http.StatusOK
+	if c.Request().Method == http.MethodPost {
+		accNbr := cookies.GetAccountNumberFromCookie(c)
+		type transferAmount struct {
+			Amount float64 `json:"amount"`
+		}
+		amt := transferAmount{}
+		c.Bind(&amt)
+		_, resp := re.service.Withdraw(c, accNbr, amt.Amount)
+		if resp != nil {
+			statusCode = resp.Code
+			response["message"] = resp.Message
+		}
+	}
+	return c.Render(statusCode, "withdraw.html", response)
+}
+
+func (re *Controller) WithdrawSummary(c echo.Context) error {
+	accNbr := cookies.GetAccountNumberFromCookie(c)
+	tp := string(trxEntity.TYPE_WITHDRAWAL)
+	var statusCode int = http.StatusOK
+	trx, err := re.service.GetLastTransaction(c, accNbr, &tp, 1)
+	if err != nil {
+		statusCode = err.Code
+		response["message"] = err.Error()
+	} else if len(trx) > 0 {
+		acc, err := re.service.GetByAccountNumber(c, accNbr)
+		if err != nil {
+			statusCode = err.Code
+			response["message"] = err.Error()
+		}
+		response["Date"] = trx[0].Date.Format("2006-01-02 15:04")
+		response["Withdraw"] = fmt.Sprintf("%0.f", trx[0].Amount)
+		response["Balance"] = fmt.Sprintf("%0.f", acc.Balance)
+	}
+	return c.Render(statusCode, "withdrawSummary.html", response)
+}
+
+func (re *Controller) Logout(c echo.Context) error {
+	err := cookies.DeleteCookie(c)
+	if err != nil {
+		response["message"] = err.Message
+		return c.Render(err.Code, "index.html", response)
+	}
+	response["message"] = "Successfully logged out"
+	return c.Render(http.StatusOK, "login.html", response)
+}
 
 func (re *Controller) Create(c echo.Context) error {
 	var err error
@@ -91,6 +152,23 @@ func (re *Controller) Import(c echo.Context) error {
 	return re.Accounts(c)
 }
 
+func (re *Controller) PINValidation(c echo.Context) error {
+	var statusCode int = http.StatusOK
+	if c.Request().Method == http.MethodPost {
+		var acc entity.Account
+		c.Bind(&acc)
+		err := re.service.PINValidation(c, acc)
+		if err != nil {
+			statusCode = err.Code
+			response["message"] = err.Message
+		}
+		cookies.SetCookie(c, acc.AccountNumber)
+		co, _ := c.Cookie("AccountNumber")
+		log.Println(co)
+	}
+	return c.Render(statusCode, "login.html", response)
+}
+
 /*
 func (re *Controller) Register(e *echo.Echo) {
 
@@ -116,7 +194,7 @@ func (re *Controller) BalanceCheck(c echo.Context) error {
 func (re *Controller) Exit(c echo.Context) error {
 	cookieStore, err := re.cookie.Store.Get(r, envLib.GetEnv("COOKIE_STORE_NAME"))
 	if err != nil {
-		responseFormatter.New(http.StatusBadRequest,
+		echo.NewHTTPError(http.StatusBadRequest,
 			fmt.Sprintf("Error getting cookie store : %s", err.Error()), true).
 			ReturnAsJson(w)
 		return
@@ -126,91 +204,20 @@ func (re *Controller) Exit(c echo.Context) error {
 	cookieStore.Save(r, w)
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("content-type", "application/json")
-	json.NewEncoder(w).Encode(responseFormatter.New(http.StatusOK, "Logout success", false))
-}
-
-func (re *Controller) PINValidation(c echo.Context) error {
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		responseFormatter.New(http.StatusBadRequest,
-			fmt.Sprintf("Failed unmarshalling json : %s", err.Error()), true).
-			ReturnAsJson(w)
-		return
-	}
-	var acc entity.Account
-	err = json.Unmarshal(b, &acc)
-	if err != nil {
-		responseFormatter.New(http.StatusBadRequest,
-			fmt.Sprintf("Failed unmarshalling json : %s", err.Error()), true).
-			ReturnAsJson(w)
-		return
-	}
-	errl := re.service.PINValidation(r.Context(), acc)
-	if errl != nil {
-		errl.ReturnAsJson(w)
-		return
-	}
-	cookieStore, err := re.cookie.Store.Get(r, envLib.GetEnv("COOKIE_STORE_NAME"))
-	if err != nil {
-		responseFormatter.New(http.StatusInternalServerError,
-			fmt.Sprintf("Error getting cookie store : %s", err.Error()), true).
-			ReturnAsJson(w)
-		return
-	}
-	cookieStore.Values["authenticated"] = true
-	cookieStore.Values["acctNbr"] = acc.AccountNumber
-	cookieStore.Save(r, w)
-	errl.ReturnAsJson(w)
-}
-
-func (re *Controller) Withdraw(c echo.Context) error {
-	cookieStore, err := re.cookie.Store.Get(r, envLib.GetEnv("COOKIE_STORE_NAME"))
-	if err != nil {
-		responseFormatter.New(http.StatusInternalServerError,
-			fmt.Sprintf("Error getting cookie store : %s", err.Error()), true).
-			ReturnAsJson(w)
-		return
-	}
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		responseFormatter.New(http.StatusBadRequest,
-			fmt.Sprintf("Failed unmarshalling json : %s", err.Error()), true).
-			ReturnAsJson(w)
-		return
-	}
-	type transferAmount struct {
-		Amount float64 `json:"amount"`
-	}
-	amt := transferAmount{}
-	err = json.Unmarshal(b, &amt)
-	if err != nil {
-		responseFormatter.New(http.StatusBadRequest,
-			fmt.Sprintf("Failed unmarshalling json : %s", err.Error()), true).
-			ReturnAsJson(w)
-		return
-	}
-	acc, resp := re.service.Withdraw(r.Context(), fmt.Sprintf("%v", cookieStore.Values["acctNbr"]), amt.Amount)
-	if resp != nil {
-		resp.ReturnAsJson(w)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Header().Add("content-type", "application/json")
-	json.NewEncoder(w).Encode(acc)
+	json.NewEncoder(w).Encode(echo.NewHTTPError(http.StatusOK, "Logout success", false))
 }
 
 func (re *Controller) Transfer(c echo.Context) error {
 	cookieStore, err := re.cookie.Store.Get(r, envLib.GetEnv("COOKIE_STORE_NAME"))
 	if err != nil {
-		responseFormatter.New(http.StatusInternalServerError,
+		echo.NewHTTPError(http.StatusInternalServerError,
 			fmt.Sprintf("Error getting cookie store : %s", err.Error()), true).
 			ReturnAsJson(w)
 		return
 	}
 	b, err := io.ReadAll(r.Body)
 	if err != nil {
-		responseFormatter.New(http.StatusBadRequest,
+		echo.NewHTTPError(http.StatusBadRequest,
 			fmt.Sprintf("Failed unmarshalling json : %s", err.Error()), true).
 			ReturnAsJson(w)
 		return
@@ -218,7 +225,7 @@ func (re *Controller) Transfer(c echo.Context) error {
 	var transfer entity.Transfer
 	err = json.Unmarshal(b, &transfer)
 	if err != nil {
-		responseFormatter.New(http.StatusBadRequest,
+		echo.NewHTTPError(http.StatusBadRequest,
 			fmt.Sprintf("Failed unmarshalling json : %s", err.Error()), true).
 			ReturnAsJson(w)
 		return

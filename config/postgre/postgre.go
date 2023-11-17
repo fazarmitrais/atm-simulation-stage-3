@@ -23,7 +23,11 @@ func Connection() *gorm.DB {
 		log.Fatalln(err)
 	}
 
-	db.AutoMigrate(&entity.Account{}, &trxEntity.Transaction{})
+	err = db.AutoMigrate(&entity.Account{}, &trxEntity.Transaction{})
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	sqlDb, err := db.DB()
 	if err != nil {
 		log.Fatalln(err)

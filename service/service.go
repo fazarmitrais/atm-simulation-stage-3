@@ -3,8 +3,8 @@ package service
 import (
 	"github.com/fazarmitrais/atm-simulation-stage-3/domain/account/entity"
 	"github.com/fazarmitrais/atm-simulation-stage-3/domain/account/repository"
+	trxEntity "github.com/fazarmitrais/atm-simulation-stage-3/domain/transaction/entity"
 	trxRepository "github.com/fazarmitrais/atm-simulation-stage-3/domain/transaction/repository"
-	"github.com/fazarmitrais/atm-simulation-stage-3/lib/responseFormatter"
 	"github.com/labstack/echo/v4"
 )
 
@@ -20,9 +20,11 @@ func NewService(accountRepository repository.AccountRepository, accountCsvReposi
 
 type ServiceInterface interface {
 	Insert(ctx echo.Context, account entity.Account) error
-	PINValidation(c echo.Context, account entity.Account) *responseFormatter.ResponseFormatter
-	Transfer(ctx, transfer entity.Transfer) (*entity.Account, *responseFormatter.ResponseFormatter)
-	BalanceCheck(ctx echo.Context, acctNbr string) (*entity.Account, *responseFormatter.ResponseFormatter)
+	PINValidation(c echo.Context, account entity.Account) *echo.HTTPError
+	Transfer(ctx, transfer entity.Transfer) (*entity.Account, *echo.HTTPError)
+	BalanceCheck(ctx echo.Context, acctNbr string) (*entity.Account, *echo.HTTPError)
 	Import(path string) error
 	GetAll() ([]*entity.Account, error)
+	GetByAccountNumber(c echo.Context, acctNbr string) (*entity.Account, *echo.HTTPError)
+	GetLastTransaction(c echo.Context, accountNumber string, transactionType *string, numOfLastTransaction int) ([]*trxEntity.Transaction, error)
 }

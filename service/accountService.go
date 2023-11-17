@@ -9,111 +9,116 @@ import (
 
 	"github.com/fazarmitrais/atm-simulation-stage-3/domain/account/entity"
 	trxEntity "github.com/fazarmitrais/atm-simulation-stage-3/domain/transaction/entity"
-	"github.com/fazarmitrais/atm-simulation-stage-3/lib/responseFormatter"
 	"github.com/labstack/echo/v4"
 )
 
-func (s *Service) PINValidation(c echo.Context, account entity.Account) *responseFormatter.ResponseFormatter {
+func (s *Service) PINValidation(c echo.Context, account entity.Account) *echo.HTTPError {
 	if strings.Trim(account.AccountNumber, " ") == "" {
-		return responseFormatter.New(http.StatusBadRequest, "Account Number is required", true)
+		return echo.NewHTTPError(http.StatusBadRequest, "Account Number is required")
 	} else if strings.Trim(account.PIN, " ") == "" {
-		return responseFormatter.New(http.StatusBadRequest, "PIN is required", true)
+		return echo.NewHTTPError(http.StatusBadRequest, "PIN is required")
 	} else if len(account.AccountNumber) < 6 {
-		return responseFormatter.New(http.StatusBadRequest, "Account Number should have 6 digits length", true)
+		return echo.NewHTTPError(http.StatusBadRequest, "Account Number should have 6 digits length")
 	} else if len(account.PIN) < 6 {
-		return responseFormatter.New(http.StatusBadRequest, "PIN should have 6 digits length", true)
+		return echo.NewHTTPError(http.StatusBadRequest, "PIN should have 6 digits length")
 	} else if _, err := strconv.Atoi(account.AccountNumber); err != nil {
-		return responseFormatter.New(http.StatusBadRequest, "Account Number should only contains numbers", true)
+		return echo.NewHTTPError(http.StatusBadRequest, "Account Number should only contains numbers")
 	} else if _, err := strconv.Atoi(account.PIN); err != nil {
-		return responseFormatter.New(http.StatusBadRequest, "PIN should only contains numbers", true)
+		return echo.NewHTTPError(http.StatusBadRequest, "PIN should only contains numbers")
 	}
 	accFromDb, err := s.AccountRepository.GetByAccountNumber(c, account.AccountNumber)
 	if err != nil {
-		return responseFormatter.New(http.StatusInternalServerError, "Failed to get account", true)
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to get account")
 	}
 	if accFromDb == nil || accFromDb.PIN != account.PIN {
-		return responseFormatter.New(http.StatusBadRequest, "Invalid Account Number/PIN", true)
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid Account Number/PIN")
 	}
 	return nil
 }
 
-func (s *Service) Withdraw(ctx echo.Context, accountNumber string, withdrawAmount float64) (*entity.AccountResponse, *responseFormatter.ResponseFormatter) {
-	accFromDb, err := s.getAndValidateByAccountNumber(ctx, accountNumber)
+func (s *Service) Withdraw(ctx echo.Context, accountNumber string, withdrawAmount float64) (*entity.AccountResponse, *echo.HTTPError) {
+	accFromDb, err := s.GetByAccountNumber(ctx, accountNumber)
 	if err != nil {
 		return nil, err
 	}
 	if withdrawAmount <= 0 {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Invalid withdraw amount", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid withdraw amount")
 	} else if withdrawAmount > 1000 {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Maximum amount to withdraw is $1000", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Maximum amount to withdraw is $1000")
 	} else if int(withdrawAmount)%10 != 0 {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Invalid ammount", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid ammount")
 	}
 
 	if accFromDb.Balance < withdrawAmount {
-		return nil, responseFormatter.New(http.StatusBadRequest, fmt.Sprintf("Insufficient balance $%0.f", withdrawAmount), true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Insufficient balance $%0.f", withdrawAmount))
 	}
 	accFromDb.Balance -= withdrawAmount
+	trx := s.AccountRepository.CreateTransaction()
+	err = s.AccountRepository.UpdateBalance(ctx, *accFromDb, trx)
+	if err != nil {
+		return nil, err
+	}
 	errl := s.CreateTransactionHistory(ctx, trxEntity.Transaction{
 		AccountNumber: accountNumber,
 		Amount:        withdrawAmount,
 		Type:          trxEntity.TYPE_WITHDRAWAL,
-	})
+	}, trx)
+	trx.Commit()
 	if err != nil {
 		fmt.Printf("Error when creating transaction history: %v \n", errl)
 	}
 	return accFromDb.ToAccountResponse(), nil
 }
 
-func (s *Service) getAndValidateByAccountNumber(c echo.Context, acctNbr string) (*entity.Account, *responseFormatter.ResponseFormatter) {
+func (s *Service) GetByAccountNumber(c echo.Context, acctNbr string) (*entity.Account, *echo.HTTPError) {
 	if strings.Trim(acctNbr, " ") == "" {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Account Number is required", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Account Number is required")
 	} else if len(acctNbr) < 6 {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Account Number should have 6 digits length", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Account Number should have 6 digits length")
 	} else if _, err := strconv.Atoi(acctNbr); err != nil {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Account Number should only contains numbers", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Account Number should only contains numbers")
 	}
 	accFromDb, err := s.AccountRepository.GetByAccountNumber(c, acctNbr)
 	if err != nil {
-		return nil, responseFormatter.New(http.StatusInternalServerError, "Failed to get account", true)
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to get account")
 	}
 	if accFromDb == nil {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Invalid Account Number/PIN", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid Account Number/PIN")
 	}
 	return accFromDb, nil
 }
 
-func (s *Service) Transfer(ctx echo.Context, transfer entity.Transfer) (*entity.AccountResponse, *responseFormatter.ResponseFormatter) {
+func (s *Service) Transfer(ctx echo.Context, transfer entity.Transfer) (*entity.AccountResponse, *echo.HTTPError) {
 	if transfer.FromAccountNumber == "" || transfer.ToAccountNumber == "" {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Account Number is required", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Account Number is required")
 	} else if transfer.FromAccountNumber == transfer.ToAccountNumber {
-		return nil, responseFormatter.New(http.StatusBadRequest, "From and Destination account number cannot be the same", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "From and Destination account number cannot be the same")
 	} else if _, err := strconv.Atoi(transfer.FromAccountNumber); err != nil {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Invalid account", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid account")
 	}
 	fromAccount, err := s.AccountRepository.GetByAccountNumber(ctx, transfer.FromAccountNumber)
 	if err != nil {
-		return nil, responseFormatter.New(http.StatusInternalServerError, "Failed to get account", true)
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to get account")
 	}
 	toAccount, err := s.AccountRepository.GetByAccountNumber(ctx, transfer.ToAccountNumber)
 	if err != nil {
-		return nil, responseFormatter.New(http.StatusInternalServerError, "Failed to get account", true)
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to get account")
 	}
 	if fromAccount == nil {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Invalid account", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid account")
 	} else if toAccount == nil {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Invalid account", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid account")
 	} else if transfer.Amount <= 0 {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Invalid transfer amount", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid transfer amount")
 	} else if transfer.Amount > 1000 {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Maximum amount to transfer is $1000", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Maximum amount to transfer is $1000")
 	} else if transfer.Amount < 1 {
-		return nil, responseFormatter.New(http.StatusBadRequest, "Minimum amount to transfer is $1", true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "Minimum amount to transfer is $1")
 	} else if fromAccount.Balance < transfer.Amount {
-		return nil, responseFormatter.New(http.StatusBadRequest, fmt.Sprintf("Insufficient balance $%0.f", transfer.Amount), true)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Insufficient balance $%0.f", transfer.Amount))
 	} else if strings.Trim(transfer.ReferenceNumber, " ") != "" {
-		if _, err = strconv.Atoi(transfer.ReferenceNumber); err != nil {
-			return nil, responseFormatter.New(http.StatusBadRequest, "Invalid Reference Number", true)
+		if _, errl := strconv.Atoi(transfer.ReferenceNumber); errl != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid Reference Number")
 		}
 	}
 	fromAccount.Balance -= transfer.Amount
@@ -123,15 +128,15 @@ func (s *Service) Transfer(ctx echo.Context, transfer entity.Transfer) (*entity.
 		TransferToAccountNumber: toAccount.AccountNumber,
 		Amount:                  transfer.Amount,
 		Type:                    trxEntity.TYPE_TRANSFER,
-	})
+	}, nil)
 	if err != nil {
 		fmt.Printf("Error when creating transaction history: %v \n", errl)
 	}
 	return fromAccount.ToAccountResponse(), nil
 }
 
-func (s *Service) BalanceCheck(ctx echo.Context, acctNbr string) (*entity.AccountResponse, *responseFormatter.ResponseFormatter) {
-	accFromDb, err := s.getAndValidateByAccountNumber(ctx, acctNbr)
+func (s *Service) BalanceCheck(ctx echo.Context, acctNbr string) (*entity.AccountResponse, *echo.HTTPError) {
+	accFromDb, err := s.GetByAccountNumber(ctx, acctNbr)
 	if err != nil {
 		return nil, err
 	}

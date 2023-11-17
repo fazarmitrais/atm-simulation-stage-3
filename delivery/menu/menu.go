@@ -78,7 +78,7 @@ func (m *Menu) TransactionScreen(c echo.Context) {
 func (m *Menu) GetLastTransaction(c echo.Context) {
 	fmt.Println()
 	fmt.Println("___Last Transaction___")
-	trxs, err := m.service.GetLastTransaction(c, *m.accountNumber, 10)
+	trxs, err := m.service.GetLastTransaction(c, *m.accountNumber, nil, 10)
 	if err != nil {
 		fmt.Println(err)
 		return

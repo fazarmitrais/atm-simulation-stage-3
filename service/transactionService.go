@@ -1,25 +1,22 @@
 package service
 
 import (
-	"sort"
 	"time"
 
 	trxEntity "github.com/fazarmitrais/atm-simulation-stage-3/domain/transaction/entity"
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
-func (s *Service) CreateTransactionHistory(c echo.Context, transaction trxEntity.Transaction) error {
+func (s *Service) CreateTransactionHistory(c echo.Context, transaction trxEntity.Transaction, trx *gorm.DB) *echo.HTTPError {
 	transaction.Date = time.Now()
-	return s.TransactionRepository.Add(c, &transaction)
+	return s.TransactionRepository.Add(c, &transaction, trx)
 }
 
-func (s *Service) GetLastTransaction(c echo.Context, accountNumber string, numOfLastTransaction int) ([]*trxEntity.Transaction, error) {
-	trxs, err := s.TransactionRepository.GetLastTransaction(c, accountNumber, numOfLastTransaction)
+func (s *Service) GetLastTransaction(c echo.Context, accountNumber string, transactionType *string, numOfLastTransaction int) ([]*trxEntity.Transaction, *echo.HTTPError) {
+	trxs, err := s.TransactionRepository.GetLastTransaction(c, accountNumber, transactionType, numOfLastTransaction)
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(trxs, func(x, y int) bool {
-		return trxs[x].Date.After(trxs[y].Date)
-	})
 	return trxs, nil
 }

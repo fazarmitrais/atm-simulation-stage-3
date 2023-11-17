@@ -8,9 +8,23 @@
 </head>
 
 <body>
+    <div section="transaction">
+        <div class="container">
+            <h1 class="title mt-4 mb-4">Transaction</h1>
+            <div class="row">
+                <a href="/api/v1/withdraw">Withdraw</a>
+            </div>
+            <div class="row">
+                <a href="/api/v1/transfer">Transfer</a>
+            </div>
+            <div class="row">
+                <a href="/api/v1/auth/logout">Exit</a>
+            </div>
+        </div>
+    </div>
     <div section="accountList">
         <div class="container">
-            <h1 class="mt-10">Account List</h1>
+            <h1 class="title mt-4 mb-4">Account List</h1>
             {{if .}}
             <table class="table table-dark">
                 <thead>
@@ -37,7 +51,7 @@
     </div>
     <div section="csvUpload">
         <div class="container">
-            <h1>Data Upload</h1>
+            <h1 class="title mt-4 mb-4">Data Upload</h1>
             <form action="/api/v1/account/import" method="post" enctype="multipart/form-data">
                 <label for="fileInput">Choose a file :</label>
                 <input type="file" id="fileInput" name="fileInput">
