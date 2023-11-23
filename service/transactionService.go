@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *Service) CreateTransactionHistory(c echo.Context, transaction trxEntity.Transaction, trx *gorm.DB) *echo.HTTPError {
+func (s *Service) CreateTransaction(c echo.Context, transaction trxEntity.Transaction, trx *gorm.DB) *echo.HTTPError {
 	transaction.Date = time.Now()
 	return s.TransactionRepository.Add(c, &transaction, trx)
 }

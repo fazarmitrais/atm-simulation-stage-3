@@ -201,11 +201,11 @@ func (m *Menu) TransferScreen(c echo.Context) {
 	if input2 == 2 {
 		return
 	} else if input2 == 1 {
-		acc, resp := m.service.Transfer(c, entity.Transfer{
-			FromAccountNumber: *m.accountNumber,
-			ToAccountNumber:   destAcctNbr,
-			ReferenceNumber:   refNumber,
-			Amount:            amount,
+		acc, resp := m.service.Transfer(c, trxEntity.Transaction{
+			AccountNumber:           *m.accountNumber,
+			TransferToAccountNumber: destAcctNbr,
+			ReferenceNumber:         refNumber,
+			Amount:                  amount,
 		})
 		if resp != nil {
 			fmt.Println(resp.Message)

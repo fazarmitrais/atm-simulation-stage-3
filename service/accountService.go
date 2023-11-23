@@ -58,14 +58,18 @@ func (s *Service) Withdraw(ctx echo.Context, accountNumber string, withdrawAmoun
 	if err != nil {
 		return nil, err
 	}
-	errl := s.CreateTransactionHistory(ctx, trxEntity.Transaction{
+	errl := s.CreateTransaction(ctx, trxEntity.Transaction{
 		AccountNumber: accountNumber,
 		Amount:        withdrawAmount,
 		Type:          trxEntity.TYPE_WITHDRAWAL,
 	}, trx)
 	trx.Commit()
-	if err != nil {
-		fmt.Printf("Error when creating transaction history: %v \n", errl)
+	if errl != nil {
+		fmt.Printf("Error when creating transaction: %v \n", errl)
+	}
+	trx.Commit()
+	if trx.Error != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Error when commiting query : %v \n", trx.Error)
 	}
 	return accFromDb.ToAccountResponse(), nil
 }
@@ -88,19 +92,19 @@ func (s *Service) GetByAccountNumber(c echo.Context, acctNbr string) (*entity.Ac
 	return accFromDb, nil
 }
 
-func (s *Service) Transfer(ctx echo.Context, transfer entity.Transfer) (*entity.AccountResponse, *echo.HTTPError) {
-	if transfer.FromAccountNumber == "" || transfer.ToAccountNumber == "" {
+func (s *Service) Transfer(ctx echo.Context, transfer trxEntity.Transaction) (*entity.AccountResponse, *echo.HTTPError) {
+	if transfer.AccountNumber == "" || transfer.TransferToAccountNumber == "" {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "Account Number is required")
-	} else if transfer.FromAccountNumber == transfer.ToAccountNumber {
+	} else if transfer.AccountNumber == transfer.TransferToAccountNumber {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "From and Destination account number cannot be the same")
-	} else if _, err := strconv.Atoi(transfer.FromAccountNumber); err != nil {
+	} else if _, err := strconv.Atoi(transfer.AccountNumber); err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid account")
 	}
-	fromAccount, err := s.AccountRepository.GetByAccountNumber(ctx, transfer.FromAccountNumber)
+	fromAccount, err := s.AccountRepository.GetByAccountNumber(ctx, transfer.AccountNumber)
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to get account")
 	}
-	toAccount, err := s.AccountRepository.GetByAccountNumber(ctx, transfer.ToAccountNumber)
+	toAccount, err := s.AccountRepository.GetByAccountNumber(ctx, transfer.TransferToAccountNumber)
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to get account")
 	}
@@ -123,14 +127,23 @@ func (s *Service) Transfer(ctx echo.Context, transfer entity.Transfer) (*entity.
 	}
 	fromAccount.Balance -= transfer.Amount
 	toAccount.Balance += transfer.Amount
-	errl := s.CreateTransactionHistory(ctx, trxEntity.Transaction{
-		AccountNumber:           fromAccount.AccountNumber,
-		TransferToAccountNumber: toAccount.AccountNumber,
-		Amount:                  transfer.Amount,
-		Type:                    trxEntity.TYPE_TRANSFER,
-	}, nil)
+	trx := s.AccountRepository.CreateTransaction()
+	err = s.AccountRepository.UpdateBalance(ctx, *fromAccount, trx)
 	if err != nil {
+		return nil, err
+	}
+	err = s.AccountRepository.UpdateBalance(ctx, *toAccount, trx)
+	if err != nil {
+		return nil, err
+	}
+	transfer.Type = trxEntity.TYPE_TRANSFER
+	errl := s.CreateTransaction(ctx, transfer, trx)
+	if errl != nil {
 		fmt.Printf("Error when creating transaction history: %v \n", errl)
+	}
+	trx.Commit()
+	if trx.Error != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Error when commiting query : %v \n", trx.Error)
 	}
 	return fromAccount.ToAccountResponse(), nil
 }
@@ -160,10 +173,7 @@ func (s *Service) Import(c echo.Context, path string) error {
 		}
 	}
 	err = s.AccountRepository.BatchInsert(c, accounts)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (s *Service) Insert(ctx echo.Context, account entity.Account) error {

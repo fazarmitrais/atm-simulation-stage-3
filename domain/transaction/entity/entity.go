@@ -13,6 +13,7 @@ type Transaction struct {
 	TransferToAccountNumber string    `json:"transferToAccountNumber"`
 	Amount                  float64   `json:"amount"`
 	Date                    time.Time `json:"date"`
+	ReferenceNumber         string    `json:"referenceNumber"`
 }
 
 const (

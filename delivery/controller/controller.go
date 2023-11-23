@@ -41,9 +41,53 @@ func (re *Controller) Register(e *echo.Echo) {
 	withdraw.GET("", re.Withdraw)
 	withdraw.POST("", re.Withdraw)
 	withdraw.GET("/summary", re.WithdrawSummary)
+	transfer := e.Group("/api/v1/transfer", cookies.Authorize)
+	transfer.GET("", re.Transfer)
+	transfer.POST("", re.Transfer)
+	transfer.GET("/summary", re.TransferSummary)
 }
 
 var response = make(map[string]interface{})
+
+func (re *Controller) Transfer(c echo.Context) error {
+	var statusCode = http.StatusOK
+	if c.Request().Method == http.MethodPost {
+		accNbr := cookies.GetAccountNumberFromCookie(c)
+		var trf trxEntity.Transaction
+		c.Bind(&trf)
+		trf.AccountNumber = accNbr
+		log.Println(trf)
+		_, resp := re.service.Transfer(c, trf)
+		if resp != nil {
+			statusCode = resp.Code
+			log.Println(resp.Message)
+			response["message"] = resp.Message
+		}
+	}
+	return c.Render(statusCode, "transfer.html", response)
+}
+
+func (re *Controller) TransferSummary(c echo.Context) error {
+	accNbr := cookies.GetAccountNumberFromCookie(c)
+	tp := string(trxEntity.TYPE_TRANSFER)
+	var statusCode int = http.StatusOK
+	trx, err := re.service.GetLastTransaction(c, accNbr, &tp, 1)
+	if err != nil {
+		statusCode = err.Code
+		response["message"] = err.Error()
+	} else if len(trx) > 0 {
+		acc, err := re.service.GetByAccountNumber(c, accNbr)
+		if err != nil {
+			statusCode = err.Code
+			response["message"] = err.Error()
+		}
+		response["DestAccNbr"] = trx[0].TransferToAccountNumber
+		response["Amount"] = fmt.Sprintf("%0.f", trx[0].Amount)
+		response["Balance"] = fmt.Sprintf("%0.f", acc.Balance)
+		response["ReferenceNumber"] = trx[0].ReferenceNumber
+	}
+	return c.Render(statusCode, "transferSummary.html", response)
+}
 
 func (re *Controller) Withdraw(c echo.Context) error {
 	var statusCode = http.StatusOK
